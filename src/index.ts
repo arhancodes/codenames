@@ -5,10 +5,6 @@ export interface Env {
   GAME_ROOM: DurableObjectNamespace;
 }
 
-// ============================================================
-// Durable Object — one instance per game room, strong consistency
-// ============================================================
-
 interface Card {
   word: string;
   team: 'red' | 'blue' | 'neutral' | 'assassin';
