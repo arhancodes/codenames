@@ -5,6 +5,14 @@ export function getHTML(): string {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Codenames</title>
+
+<!-- Open Graph (rich link preview in iMessage / Mail / etc.) -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Codenames">
+<meta property="og:description" content="Play Codenames with friends — pick a room code and jump in.">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Codenames">
+<meta name="twitter:description" content="Play Codenames with friends — pick a room code and jump in.">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
