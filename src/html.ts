@@ -73,6 +73,19 @@ export function getHTML(): string {
     border-radius: 16px; padding: 36px;
   }
 
+  .rejoin-banner {
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    text-align: left;
+  }
+  .rejoin-text { font-size: 0.9rem; color: var(--text); margin-bottom: 10px; line-height: 1.4; }
+  .rejoin-text strong { color: var(--green); letter-spacing: 0.1em; font-size: 1rem; }
+  .rejoin-actions { display: flex; gap: 8px; }
+  .rejoin-actions .btn { flex: 1; padding: 8px 12px; font-size: 0.85rem; }
+
   .landing-box h2 { font-size: 1.3rem; margin-bottom: 20px; }
 
   .landing-row {
@@ -385,6 +398,13 @@ export function getHTML(): string {
     <!-- LANDING SCREEN -->
     <div class="screen active" id="screenLanding">
       <div class="landing-box">
+        <div class="rejoin-banner" id="rejoinBanner" style="display:none;">
+          <div class="rejoin-text">You have an unfinished game in room <strong id="rejoinCode"></strong>.</div>
+          <div class="rejoin-actions">
+            <button class="btn btn-green" onclick="rejoinSavedRoom()">Rejoin</button>
+            <button class="btn btn-secondary" onclick="dismissSavedRoom()">Start Fresh</button>
+          </div>
+        </div>
         <h2>Play Codenames</h2>
         <div class="landing-row">
           <input type="text" id="joinCodeInput" placeholder="Room code" maxlength="4">
@@ -522,41 +542,74 @@ export function getHTML(): string {
     localStorage.removeItem('cn_role');
     localStorage.removeItem('cn_team');
   }
-  // Auto-rejoin on page load
-  (function restoreSession() {
+  // On page load: if a saved session exists, validate it and show a
+  // "Rejoin" prompt instead of auto-jumping into the game. This way
+  // closing the tab + reopening always lands on the home screen.
+  (function checkSavedSession() {
     const r = localStorage.getItem('cn_room');
     const p = localStorage.getItem('cn_pid');
-    if (r && p) {
-      roomCode = r;
-      playerId = p;
-      myRole = localStorage.getItem('cn_role') || null;
-      myTeam = localStorage.getItem('cn_team') || null;
-      // Check if game still exists
-      fetch('/api/game/' + roomCode + '?playerId=' + playerId)
-        .then(res => res.json())
-        .then(data => {
-          if (data.error) { clearSession(); return; }
-          // Verify our player is still in the game
-          const me = (data.players || []).find(pl => pl.id === playerId);
-          if (!me) { clearSession(); return; }
-          myRole = data._playerRole;
-          myTeam = data._playerTeam;
-          if (data.phase === 'lobby') {
-            showScreen('screenLobby');
-            document.getElementById('lobbyRoomCode').textContent = roomCode;
-            updateLobbySlots(data.players || [], data._canStart);
-            document.getElementById('joinBtn').classList.add('btn-disabled');
-            document.getElementById('joinBtn').textContent = 'Joined ✓';
-            startLobbyPoll();
-          } else {
-            showScreen('screenGame');
-            renderGame(data);
-            startGamePoll();
-          }
-        })
-        .catch(() => clearSession());
-    }
+    if (!r || !p) return;
+    // Validate the saved session against the server before showing the prompt.
+    fetch('/api/game/' + r + '?playerId=' + p)
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) { clearSession(); return; }
+        const me = (data.players || []).find(pl => pl.id === p);
+        if (!me) { clearSession(); return; }
+        if (data.gameOver) { clearSession(); return; }
+        // Valid unfinished session — show the rejoin banner with the room code.
+        document.getElementById('rejoinCode').textContent = r;
+        document.getElementById('rejoinBanner').style.display = 'block';
+        // Pre-fill the join code input as a convenience.
+        const joinInput = document.getElementById('joinCodeInput');
+        if (joinInput && !joinInput.value) joinInput.value = r;
+      })
+      .catch(() => { /* offline or server down — leave banner hidden */ });
   })();
+
+  function rejoinSavedRoom() {
+    const r = localStorage.getItem('cn_room');
+    const p = localStorage.getItem('cn_pid');
+    if (!r || !p) {
+      document.getElementById('rejoinBanner').style.display = 'none';
+      return;
+    }
+    roomCode = r;
+    playerId = p;
+    myRole = localStorage.getItem('cn_role') || null;
+    myTeam = localStorage.getItem('cn_team') || null;
+    fetch('/api/game/' + roomCode + '?playerId=' + playerId)
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) { clearSession(); document.getElementById('rejoinBanner').style.display = 'none'; return; }
+        const me = (data.players || []).find(pl => pl.id === playerId);
+        if (!me) { clearSession(); document.getElementById('rejoinBanner').style.display = 'none'; return; }
+        if (data.gameOver) { clearSession(); document.getElementById('rejoinBanner').style.display = 'none'; return; }
+        myRole = data._playerRole;
+        myTeam = data._playerTeam;
+        document.getElementById('rejoinBanner').style.display = 'none';
+        if (data.phase === 'lobby') {
+          showScreen('screenLobby');
+          document.getElementById('lobbyRoomCode').textContent = roomCode;
+          updateLobbySlots(data.players || [], data._canStart);
+          document.getElementById('joinBtn').classList.add('btn-disabled');
+          document.getElementById('joinBtn').textContent = 'Joined ✓';
+          startLobbyPoll();
+        } else {
+          showScreen('screenGame');
+          renderGame(data);
+          startGamePoll();
+        }
+      })
+      .catch(() => { showToast('Could not rejoin room'); });
+  }
+
+  function dismissSavedRoom() {
+    clearSession();
+    document.getElementById('rejoinBanner').style.display = 'none';
+    const joinInput = document.getElementById('joinCodeInput');
+    if (joinInput) joinInput.value = '';
+  }
 
   function startGame() {
     if (!roomCode || !playerId) return;
@@ -948,6 +1001,16 @@ export function getHTML(): string {
       .catch(() => {});
   }
 
+  function newRoom() {
+    clearSession();
+    stopPolling();
+    roomCode = null; playerId = null; myRole = null; myTeam = null;
+    selectedRole = null; lastStateJSON = ''; gameOverShown = false;
+    document.getElementById('overlay').classList.remove('visible');
+    document.getElementById('confettiContainer').innerHTML = '';
+    showScreen('screenLanding');
+  }
+
   // ===== HELPERS =====
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -986,6 +1049,8 @@ export function getHTML(): string {
     } else {
       html = '<h2>GAME OVER</h2><p>' + (state.gameOverReason || '') + '</p>';
     }
+    html += '<button class="btn btn-green" onclick="newRound()">Play Again</button> ';
+    html += '<button class="btn btn-blue" onclick="newRoom()">New Room</button> ';
     html += '<button class="btn btn-secondary" onclick="document.getElementById(\\'overlay\\').classList.remove(\\'visible\\')">Close</button>';
     content.innerHTML = html;
     overlay.classList.add('visible');
