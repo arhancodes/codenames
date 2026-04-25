@@ -26,6 +26,13 @@ interface Clue {
   guessesLeft: number;
 }
 
+interface CheatVote {
+  initiatorId: string;
+  initiatorName: string;
+  startedAt: number;
+  approvals: string[]; // player IDs who approved (initiator auto-approves)
+}
+
 interface GameState {
   id: string;
   roomCode: string;
@@ -41,7 +48,11 @@ interface GameState {
   currentClue: Clue | null;
   clueHistory: Clue[];
   currentVotes: Record<string, number>;
+  cheatTally: number;
+  activeCheatVote: CheatVote | null;
 }
+
+const ACCUSED_NAME = 'Ms DTM';
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -94,6 +105,10 @@ function getTeamOperatives(game: GameState, team: 'red' | 'blue'): Player[] {
   return game.players.filter(p => p.role === role);
 }
 
+function eligibleCheatVoters(game: GameState): Player[] {
+  return game.players.filter(p => p.name !== ACCUSED_NAME);
+}
+
 function filterStateForPlayer(game: GameState, playerId: string | null): object {
   const player = playerId ? game.players.find(p => p.id === playerId) : null;
   const isSpymaster = player?.role === 'red-spymaster' || player?.role === 'blue-spymaster';
@@ -118,6 +133,18 @@ function filterStateForPlayer(game: GameState, playerId: string | null): object 
     ...(p.id === playerId ? { id: p.id } : {}),
   }));
 
+  // Cheat vote — surface counts but not raw player IDs
+  const eligible = eligibleCheatVoters(game);
+  const cheatVote = game.activeCheatVote
+    ? {
+        initiatorName: game.activeCheatVote.initiatorName,
+        approvals: game.activeCheatVote.approvals.length,
+        needed: eligible.length,
+        myApproval: playerId ? game.activeCheatVote.approvals.includes(playerId) : false,
+      }
+    : null;
+  const isAccused = player?.name === ACCUSED_NAME;
+
   return {
     id: game.id,
     roomCode: game.roomCode,
@@ -133,14 +160,19 @@ function filterStateForPlayer(game: GameState, playerId: string | null): object 
     currentClue: game.currentClue,
     clueHistory: game.clueHistory,
     currentVotes: voteSummary,
+    cheatTally: game.cheatTally,
+    cheatVote,
     _isSpymaster: isSpymaster,
     _playerId: playerId,
     _playerRole: player?.role ?? null,
+    _playerName: player?.name ?? null,
     _playerTeam: player ? (player.role.startsWith('red') ? 'red' : 'blue') : null,
     _myVote: myVote,
     _totalOperatives: teamOps.length,
     _votesIn: Object.keys(game.currentVotes).length,
     _canStart: game.phase === 'lobby' && canStartGame(game.players),
+    _canAccuse: !isAccused && eligible.length > 0,
+    _accusedName: ACCUSED_NAME,
   };
 }
 
@@ -166,7 +198,13 @@ export class GameRoom {
 
   private async loadGame(): Promise<GameState | null> {
     if (this.game) return this.game;
-    this.game = (await this.state.storage.get<GameState>('game')) ?? null;
+    const stored = (await this.state.storage.get<GameState>('game')) ?? null;
+    if (stored) {
+      // Migrate older saves: cheat tally starts at 3, no active vote
+      if (typeof stored.cheatTally !== 'number') stored.cheatTally = 3;
+      if (stored.activeCheatVote === undefined) stored.activeCheatVote = null;
+    }
+    this.game = stored;
     return this.game;
   }
 
@@ -200,6 +238,9 @@ export class GameRoom {
         case 'guess': return await this.handleGuess(request);
         case 'end-turn': return await this.handleEndTurn(request);
         case 'new-round': return await this.handleNewRound(request);
+        case 'cheat-start': return await this.handleCheatStart(request);
+        case 'cheat-vote': return await this.handleCheatVote(request);
+        case 'cheat-cancel': return await this.handleCheatCancel(request);
         default: return jsonResponse({ error: 'Unknown action' }, 400);
       }
     } catch (e: any) {
@@ -225,6 +266,8 @@ export class GameRoom {
       currentClue: null,
       clueHistory: [],
       currentVotes: {},
+      cheatTally: 3,
+      activeCheatVote: null,
     };
     await this.saveGame();
     return jsonResponse({ roomCode: this.game.roomCode });
@@ -405,6 +448,79 @@ export class GameRoom {
     return jsonResponse(filterStateForPlayer(game, body.playerId));
   }
 
+  private async handleCheatStart(request: Request): Promise<Response> {
+    const body = await request.json() as { playerId: string };
+    const game = await this.loadGame();
+    if (!game) return jsonResponse({ error: 'Game not found' }, 404);
+    if (game.activeCheatVote) return jsonResponse({ error: 'A cheat vote is already in progress' }, 400);
+
+    const player = game.players.find(p => p.id === body.playerId);
+    if (!player) return jsonResponse({ error: 'Player not found' }, 400);
+    if (player.name === ACCUSED_NAME) return jsonResponse({ error: 'The accused cannot start their own vote' }, 403);
+
+    const eligible = eligibleCheatVoters(game);
+    game.activeCheatVote = {
+      initiatorId: player.id,
+      initiatorName: player.name,
+      startedAt: Date.now(),
+      approvals: [player.id],
+    };
+
+    // If the initiator is the only eligible voter, the vote passes immediately
+    if (game.activeCheatVote.approvals.length >= eligible.length) {
+      game.cheatTally += 1;
+      game.activeCheatVote = null;
+    }
+
+    await this.saveGame();
+    return jsonResponse(filterStateForPlayer(game, body.playerId));
+  }
+
+  private async handleCheatVote(request: Request): Promise<Response> {
+    const body = await request.json() as { playerId: string; approve: boolean };
+    const game = await this.loadGame();
+    if (!game) return jsonResponse({ error: 'Game not found' }, 404);
+    if (!game.activeCheatVote) return jsonResponse({ error: 'No cheat vote in progress' }, 400);
+
+    const player = game.players.find(p => p.id === body.playerId);
+    if (!player) return jsonResponse({ error: 'Player not found' }, 400);
+    if (player.name === ACCUSED_NAME) return jsonResponse({ error: 'The accused cannot vote' }, 403);
+
+    if (body.approve === false) {
+      // A single rejection cancels the vote — needs to be unanimous
+      game.activeCheatVote = null;
+    } else {
+      if (!game.activeCheatVote.approvals.includes(player.id)) {
+        game.activeCheatVote.approvals.push(player.id);
+      }
+      const eligible = eligibleCheatVoters(game);
+      if (game.activeCheatVote.approvals.length >= eligible.length) {
+        game.cheatTally += 1;
+        game.activeCheatVote = null;
+      }
+    }
+
+    await this.saveGame();
+    return jsonResponse(filterStateForPlayer(game, body.playerId));
+  }
+
+  private async handleCheatCancel(request: Request): Promise<Response> {
+    const body = await request.json() as { playerId: string };
+    const game = await this.loadGame();
+    if (!game) return jsonResponse({ error: 'Game not found' }, 404);
+    if (!game.activeCheatVote) return jsonResponse({ error: 'No cheat vote in progress' }, 400);
+
+    const player = game.players.find(p => p.id === body.playerId);
+    if (!player) return jsonResponse({ error: 'Player not found' }, 400);
+    if (player.id !== game.activeCheatVote.initiatorId) {
+      return jsonResponse({ error: 'Only the initiator can cancel the vote' }, 403);
+    }
+
+    game.activeCheatVote = null;
+    await this.saveGame();
+    return jsonResponse(filterStateForPlayer(game, body.playerId));
+  }
+
   private async handleNewRound(request: Request): Promise<Response> {
     const body = await request.json() as { playerId: string };
     const game = await this.loadGame();
@@ -551,6 +667,39 @@ export default {
       const body = await request.json() as { gameId: string; playerId: string };
       const stub = getStub(env, body.gameId);
       return stub.fetch(new Request('https://do/?action=new-round', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: body.playerId }),
+      }));
+    }
+
+    // Start a "Did Masi cheat?" vote
+    if (request.method === 'POST' && pathname === '/api/cheat-start') {
+      const body = await request.json() as { gameId: string; playerId: string };
+      const stub = getStub(env, body.gameId);
+      return stub.fetch(new Request('https://do/?action=cheat-start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: body.playerId }),
+      }));
+    }
+
+    // Approve / reject the cheat vote
+    if (request.method === 'POST' && pathname === '/api/cheat-vote') {
+      const body = await request.json() as { gameId: string; playerId: string; approve: boolean };
+      const stub = getStub(env, body.gameId);
+      return stub.fetch(new Request('https://do/?action=cheat-vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: body.playerId, approve: body.approve }),
+      }));
+    }
+
+    // Initiator cancels the cheat vote
+    if (request.method === 'POST' && pathname === '/api/cheat-cancel') {
+      const body = await request.json() as { gameId: string; playerId: string };
+      const stub = getStub(env, body.gameId);
+      return stub.fetch(new Request('https://do/?action=cheat-cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playerId: body.playerId }),

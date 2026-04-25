@@ -347,6 +347,81 @@ export function getHTML(): string {
   .overlay-content .winner-blue { color: var(--blue); }
   .overlay-content p { color: var(--text-muted); margin-bottom: 24px; font-size: 1rem; }
 
+  /* Cheat panel — "Did Masi cheat?" */
+  .cheat-panel {
+    margin-top: 14px;
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.08));
+    border: 1px solid rgba(236, 72, 153, 0.35);
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .cheat-panel .cheat-tally {
+    display: flex; flex-direction: column; gap: 2px;
+    min-width: 130px;
+  }
+  .cheat-panel .cheat-label {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .cheat-panel .cheat-count {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #f472b6;
+    letter-spacing: -0.02em;
+  }
+  .cheat-panel .cheat-actions { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; justify-content: flex-end; }
+  .btn-cheat {
+    background: linear-gradient(135deg, #ec4899, #a855f7);
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .btn-cheat:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(236, 72, 153, 0.35); }
+  .btn-cheat:disabled { opacity: 0.55; cursor: not-allowed; }
+  .cheat-vote-box {
+    width: 100%;
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px dashed rgba(236, 72, 153, 0.45);
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .cheat-vote-box .cheat-vote-text { font-size: 0.85rem; color: var(--text); line-height: 1.4; }
+  .cheat-vote-box .cheat-vote-progress { font-size: 0.75rem; color: var(--text-muted); }
+  .cheat-vote-box .cheat-vote-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn-approve {
+    background: var(--green); color: white; border: none;
+    padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 0.8rem; cursor: pointer;
+  }
+  .btn-approve:disabled { opacity: 0.55; cursor: not-allowed; }
+  .btn-reject {
+    background: var(--red); color: white; border: none;
+    padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 0.8rem; cursor: pointer;
+  }
+  .btn-cancel-vote {
+    background: rgba(148, 163, 184, 0.18); color: var(--text); border: 1px solid var(--border);
+    padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 0.8rem; cursor: pointer;
+  }
+  .cheat-pulse { animation: cheatPulse 1.6s ease-in-out infinite; }
+  @keyframes cheatPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.45); }
+    50% { box-shadow: 0 0 0 10px rgba(236, 72, 153, 0); }
+  }
+
   /* Confetti */
   .confetti-container { position: fixed; inset: 0; pointer-events: none; z-index: 600; overflow: hidden; }
   .confetti {
@@ -516,6 +591,15 @@ export function getHTML(): string {
 
       <div class="actions" id="gameActions">
         <button class="btn btn-secondary" id="endTurnBtn" onclick="endTurn()" style="display:none">End Turn</button>
+      </div>
+
+      <div class="cheat-panel" id="cheatPanel">
+        <div class="cheat-tally">
+          <span class="cheat-label">Caught cheating</span>
+          <span class="cheat-count" id="cheatCount">0</span>
+        </div>
+        <div class="cheat-actions" id="cheatActions"></div>
+        <div class="cheat-vote-box" id="cheatVoteBox" style="display:none"></div>
       </div>
     </div>
   </div>
@@ -927,6 +1011,9 @@ export function getHTML(): string {
       grid.appendChild(el);
     });
 
+    // Cheat panel
+    renderCheatPanel(state);
+
     // Game over
     if (state.gameOver && !gameOverShown) {
       gameOverShown = true;
@@ -936,6 +1023,105 @@ export function getHTML(): string {
       gameOverShown = false;
       document.getElementById('overlay').classList.remove('visible');
     }
+  }
+
+  function renderCheatPanel(state) {
+    const panel = document.getElementById('cheatPanel');
+    if (!panel) return;
+    document.getElementById('cheatCount').textContent = state.cheatTally ?? 0;
+
+    const actions = document.getElementById('cheatActions');
+    const box = document.getElementById('cheatVoteBox');
+    const myName = state._playerName || '';
+    const accusedName = state._accusedName || 'Ms DTM';
+    const isAccused = myName === accusedName;
+    const vote = state.cheatVote;
+
+    // Hide entire panel for the accused themselves
+    panel.style.display = isAccused ? 'none' : 'flex';
+
+    if (vote) {
+      actions.innerHTML = '';
+      box.style.display = 'flex';
+      panel.classList.add('cheat-pulse');
+      const initiator = vote.initiatorName || 'Someone';
+      const remaining = Math.max(0, (vote.needed || 0) - (vote.approvals || 0));
+      const isInitiator = initiator === myName;
+      const safeInitiator = String(initiator).replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const safeAccused = String(accusedName).replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      let html = '<div class="cheat-vote-text">🚨 <strong>' + safeInitiator + '</strong> says <strong>' + safeAccused + '</strong> cheated. Everyone must approve to count it.</div>';
+      html += '<div class="cheat-vote-progress">' + (vote.approvals || 0) + ' of ' + (vote.needed || 0) + ' approvals — ' + remaining + ' more needed</div>';
+      html += '<div class="cheat-vote-actions">';
+      if (vote.myApproval) {
+        html += '<button class="btn-approve" disabled>You approved ✓</button>';
+      } else {
+        html += '<button class="btn-approve" onclick="cheatVote(true)">Yes, she cheated</button>';
+        html += '<button class="btn-reject" onclick="cheatVote(false)">No, she did not</button>';
+      }
+      if (isInitiator) {
+        html += '<button class="btn-cancel-vote" onclick="cheatCancel()">Cancel vote</button>';
+      }
+      html += '</div>';
+      box.innerHTML = html;
+    } else {
+      box.style.display = 'none';
+      panel.classList.remove('cheat-pulse');
+      if (state._canAccuse) {
+        actions.innerHTML = '<button class="btn-cheat" onclick="cheatStart()">🚨 Did ' + (accusedName === 'Ms DTM' ? 'Masi' : accusedName) + ' cheat?</button>';
+      } else {
+        actions.innerHTML = '';
+      }
+    }
+  }
+
+  function cheatStart() {
+    if (!playerId || !roomCode) return;
+    fetch('/api/cheat-start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: roomCode, playerId })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) { showToast(data.error); return; }
+        lastStateJSON = JSON.stringify(data);
+        renderGame(data);
+      })
+      .catch(() => showToast('Could not start vote'));
+  }
+
+  function cheatVote(approve) {
+    if (!playerId || !roomCode) return;
+    fetch('/api/cheat-vote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: roomCode, playerId, approve })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) { showToast(data.error); return; }
+        lastStateJSON = JSON.stringify(data);
+        renderGame(data);
+        if (!data.cheatVote && approve) showToast('Tally updated: ' + data.cheatTally);
+        if (!data.cheatVote && !approve) showToast('Vote rejected');
+      })
+      .catch(() => showToast('Vote failed'));
+  }
+
+  function cheatCancel() {
+    if (!playerId || !roomCode) return;
+    fetch('/api/cheat-cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: roomCode, playerId })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) { showToast(data.error); return; }
+        lastStateJSON = JSON.stringify(data);
+        renderGame(data);
+      })
+      .catch(() => {});
   }
 
   function giveClue() {
