@@ -127,6 +127,18 @@ export function getHTML(): string {
   .btn-green:hover { background: #10b981; }
   .btn-red { background: var(--red); color: white; }
   .btn-red:hover { background: #ef4444; }
+  .btn-reshuffle {
+    background: rgba(168, 85, 247, 0.12);
+    color: #c4b5fd;
+    border: 1px solid rgba(168, 85, 247, 0.4);
+    padding: 8px 14px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .btn-reshuffle:hover { background: rgba(168, 85, 247, 0.22); }
+
   .btn-secondary { background: var(--card); color: var(--text); border: 2px solid var(--border); }
   .btn-secondary:hover { border-color: var(--text-muted); background: var(--card-hover); }
   .btn-full { width: 100%; }
@@ -591,6 +603,7 @@ export function getHTML(): string {
 
       <div class="actions" id="gameActions">
         <button class="btn btn-secondary" id="endTurnBtn" onclick="endTurn()" style="display:none">End Turn</button>
+        <button class="btn btn-reshuffle" id="reshuffleBtn" onclick="reshuffleBoard()">🔀 Reshuffle Board</button>
       </div>
 
       <div class="cheat-panel" id="cheatPanel">
@@ -954,6 +967,10 @@ export function getHTML(): string {
        (state.currentTeam === 'blue' && myRole === 'blue-operative'));
     etb.style.display = isMyGuessPhase ? 'inline-flex' : 'none';
 
+    // Reshuffle button (any active player during gameplay)
+    const rb = document.getElementById('reshuffleBtn');
+    if (rb) rb.style.display = (!state.gameOver && state.phase !== 'lobby') ? 'inline-flex' : 'none';
+
     // Vote status
     const vs = document.getElementById('voteStatus');
     if (state.phase === 'guess' && !state.gameOver && state._totalOperatives > 1) {
@@ -1193,6 +1210,24 @@ export function getHTML(): string {
         document.getElementById('confettiContainer').innerHTML = '';
       })
       .catch(() => {});
+  }
+
+  function reshuffleBoard() {
+    if (!playerId || !roomCode) return;
+    if (!confirm('Reshuffle the board? Current clues and progress will be lost.')) return;
+    fetch('/api/reshuffle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: roomCode, playerId })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) { showToast(data.error); return; }
+        lastStateJSON = '';
+        renderGame(data);
+        showToast('Board reshuffled');
+      })
+      .catch(() => showToast('Failed to reshuffle'));
   }
 
   function newRoom() {

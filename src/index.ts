@@ -238,6 +238,7 @@ export class GameRoom {
         case 'guess': return await this.handleGuess(request);
         case 'end-turn': return await this.handleEndTurn(request);
         case 'new-round': return await this.handleNewRound(request);
+        case 'reshuffle': return await this.handleReshuffle(request);
         case 'cheat-start': return await this.handleCheatStart(request);
         case 'cheat-vote': return await this.handleCheatVote(request);
         case 'cheat-cancel': return await this.handleCheatCancel(request);
@@ -541,6 +542,31 @@ export class GameRoom {
     await this.saveGame();
     return jsonResponse(filterStateForPlayer(game, body.playerId));
   }
+
+  private async handleReshuffle(request: Request): Promise<Response> {
+    const body = await request.json() as { playerId: string };
+    const game = await this.loadGame();
+    if (!game) return jsonResponse({ error: 'Game not found' }, 404);
+    if (game.phase === 'lobby') return jsonResponse({ error: 'Game has not started' }, 400);
+
+    const player = game.players.find(p => p.id === body.playerId);
+    if (!player) return jsonResponse({ error: 'Player not found' }, 400);
+
+    const { cards, startingTeam } = createBoard();
+    game.cards = cards;
+    game.currentTeam = startingTeam;
+    game.phase = 'clue';
+    game.redScore = cards.filter(c => c.team === 'red').length;
+    game.blueScore = cards.filter(c => c.team === 'blue').length;
+    game.winner = null;
+    game.gameOver = false;
+    game.gameOverReason = null;
+    game.currentClue = null;
+    game.clueHistory = [];
+    game.currentVotes = {};
+    await this.saveGame();
+    return jsonResponse(filterStateForPlayer(game, body.playerId));
+  }
 }
 
 // ============================================================
@@ -667,6 +693,17 @@ export default {
       const body = await request.json() as { gameId: string; playerId: string };
       const stub = getStub(env, body.gameId);
       return stub.fetch(new Request('https://do/?action=new-round', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId: body.playerId }),
+      }));
+    }
+
+    // Reshuffle the board mid-game (when a board is unplayable)
+    if (request.method === 'POST' && pathname === '/api/reshuffle') {
+      const body = await request.json() as { gameId: string; playerId: string };
+      const stub = getStub(env, body.gameId);
+      return stub.fetch(new Request('https://do/?action=reshuffle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playerId: body.playerId }),
