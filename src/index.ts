@@ -50,6 +50,7 @@ interface GameState {
   currentVotes: Record<string, number>;
   cheatTally: number;
   activeCheatVote: CheatVote | null;
+  reshuffleVotes: string[];
 }
 
 const ACCUSED_NAME = 'Ms DTM';
@@ -162,6 +163,9 @@ function filterStateForPlayer(game: GameState, playerId: string | null): object 
     currentVotes: voteSummary,
     cheatTally: game.cheatTally,
     cheatVote,
+    reshuffleVotes: (game.reshuffleVotes ?? []).length,
+    reshuffleNeeded: game.players.length,
+    myReshuffleVote: !!playerId && (game.reshuffleVotes ?? []).includes(playerId),
     _isSpymaster: isSpymaster,
     _playerId: playerId,
     _playerRole: player?.role ?? null,
@@ -203,6 +207,7 @@ export class GameRoom {
       // Migrate older saves: cheat tally starts at 3, no active vote
       if (typeof stored.cheatTally !== 'number') stored.cheatTally = 3;
       if (stored.activeCheatVote === undefined) stored.activeCheatVote = null;
+      if (!Array.isArray(stored.reshuffleVotes)) stored.reshuffleVotes = [];
     }
     this.game = stored;
     return this.game;
@@ -269,6 +274,7 @@ export class GameRoom {
       currentVotes: {},
       cheatTally: 3,
       activeCheatVote: null,
+      reshuffleVotes: [],
     };
     await this.saveGame();
     return jsonResponse({ roomCode: this.game.roomCode });
@@ -539,6 +545,7 @@ export class GameRoom {
     game.currentClue = null;
     game.clueHistory = [];
     game.currentVotes = {};
+    game.reshuffleVotes = [];
     await this.saveGame();
     return jsonResponse(filterStateForPlayer(game, body.playerId));
   }
@@ -552,18 +559,31 @@ export class GameRoom {
     const player = game.players.find(p => p.id === body.playerId);
     if (!player) return jsonResponse({ error: 'Player not found' }, 400);
 
-    const { cards, startingTeam } = createBoard();
-    game.cards = cards;
-    game.currentTeam = startingTeam;
-    game.phase = 'clue';
-    game.redScore = cards.filter(c => c.team === 'red').length;
-    game.blueScore = cards.filter(c => c.team === 'blue').length;
-    game.winner = null;
-    game.gameOver = false;
-    game.gameOverReason = null;
-    game.currentClue = null;
-    game.clueHistory = [];
-    game.currentVotes = {};
+    if (!Array.isArray(game.reshuffleVotes)) game.reshuffleVotes = [];
+    const voted = game.reshuffleVotes.includes(player.id);
+    if (voted) {
+      game.reshuffleVotes = game.reshuffleVotes.filter(id => id !== player.id);
+    } else {
+      game.reshuffleVotes.push(player.id);
+    }
+
+    const allVoted = game.reshuffleVotes.length >= game.players.length;
+    if (allVoted) {
+      const { cards, startingTeam } = createBoard();
+      game.cards = cards;
+      game.currentTeam = startingTeam;
+      game.phase = 'clue';
+      game.redScore = cards.filter(c => c.team === 'red').length;
+      game.blueScore = cards.filter(c => c.team === 'blue').length;
+      game.winner = null;
+      game.gameOver = false;
+      game.gameOverReason = null;
+      game.currentClue = null;
+      game.clueHistory = [];
+      game.currentVotes = {};
+      game.reshuffleVotes = [];
+    }
+
     await this.saveGame();
     return jsonResponse(filterStateForPlayer(game, body.playerId));
   }

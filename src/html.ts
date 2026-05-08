@@ -131,18 +131,27 @@ export function getHTML(): string {
     background: rgba(168, 85, 247, 0.12);
     color: #c4b5fd;
     border: 1px solid rgba(168, 85, 247, 0.4);
-    width: 40px;
+    min-width: 40px;
     height: 40px;
-    padding: 0;
-    font-size: 1.1rem;
+    padding: 0 10px;
+    font-size: 1rem;
+    font-weight: 700;
     border-radius: 8px;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 4px;
     line-height: 1;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
   }
   .btn-reshuffle:hover { background: rgba(168, 85, 247, 0.22); }
+  .btn-reshuffle.voted {
+    background: rgba(168, 85, 247, 0.35);
+    border-color: rgba(168, 85, 247, 0.85);
+    color: #fff;
+    box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.25);
+  }
 
   .btn-secondary { background: var(--card); color: var(--text); border: 2px solid var(--border); }
   .btn-secondary:hover { border-color: var(--text-muted); background: var(--card-hover); }
@@ -972,9 +981,18 @@ export function getHTML(): string {
        (state.currentTeam === 'blue' && myRole === 'blue-operative'));
     etb.style.display = isMyGuessPhase ? 'inline-flex' : 'none';
 
-    // Reshuffle button (any active player during gameplay)
+    // Reshuffle button (any active player during gameplay) — consensus required
     const rb = document.getElementById('reshuffleBtn');
-    if (rb) rb.style.display = (!state.gameOver && state.phase !== 'lobby') ? 'inline-flex' : 'none';
+    if (rb) {
+      rb.style.display = (!state.gameOver && state.phase !== 'lobby') ? 'inline-flex' : 'none';
+      const v = state.reshuffleVotes || 0;
+      const n = state.reshuffleNeeded || 0;
+      rb.textContent = v > 0 ? '🔀 ' + v + '/' + n : '🔀';
+      rb.classList.toggle('voted', !!state.myReshuffleVote);
+      rb.title = state.myReshuffleVote
+        ? 'You voted to reshuffle. Click to withdraw.'
+        : 'Vote to reshuffle. Everyone must agree.';
+    }
 
     // Vote status
     const vs = document.getElementById('voteStatus');
@@ -1219,7 +1237,6 @@ export function getHTML(): string {
 
   function reshuffleBoard() {
     if (!playerId || !roomCode) return;
-    if (!confirm('Reshuffle the board? Current clues and progress will be lost.')) return;
     fetch('/api/reshuffle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1230,7 +1247,11 @@ export function getHTML(): string {
         if (data.error) { showToast(data.error); return; }
         lastStateJSON = '';
         renderGame(data);
-        showToast('Board reshuffled');
+        const v = data.reshuffleVotes || 0;
+        const n = data.reshuffleNeeded || 0;
+        if (v === 0 && n > 0) showToast('Board reshuffled');
+        else if (data.myReshuffleVote) showToast('Reshuffle vote · ' + v + '/' + n);
+        else showToast('Vote withdrawn');
       })
       .catch(() => showToast('Failed to reshuffle'));
   }
