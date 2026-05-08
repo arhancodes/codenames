@@ -299,6 +299,51 @@ export function getHTML(): string {
   .score-panel.blue-panel .score-value { color: var(--blue); }
   .score-panel .score-sub { font-size: 0.65rem; color: var(--text-muted); margin-top: 2px; }
 
+  .right-column { display: flex; flex-direction: column; gap: 12px; flex-shrink: 0; }
+
+  .clue-history-panel {
+    width: 130px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .clue-history-panel .ch-title {
+    font-size: 0.6rem;
+    font-weight: 800;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    text-align: center;
+  }
+  .clue-history-panel .ch-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  .clue-history-panel .ch-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 8px; border-radius: 7px;
+    font-size: 0.72rem; font-weight: 700;
+    line-height: 1.1;
+  }
+  .clue-history-panel .ch-item.red { background: rgba(220, 38, 38, 0.16); color: var(--red-light); }
+  .clue-history-panel .ch-item.blue { background: rgba(37, 99, 235, 0.16); color: var(--blue-light); }
+  .clue-history-panel .ch-word { letter-spacing: 0.04em; word-break: break-word; }
+  .clue-history-panel .ch-num { font-weight: 900; opacity: 0.95; margin-left: 6px; flex-shrink: 0; }
+  .clue-history-panel .ch-empty {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    text-align: center;
+    padding: 6px 0;
+    font-style: italic;
+  }
+
   .grid-container { flex: 1; max-width: 720px; }
 
   .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; }
@@ -462,6 +507,11 @@ export function getHTML(): string {
     .container { padding: 8px; }
     .game-layout { flex-direction: column; align-items: center; }
     .game-layout .score-panel { display: none; }
+    .right-column { width: 100%; flex-direction: row; justify-content: center; }
+    .right-column .score-panel { display: none; }
+    .clue-history-panel { width: 100%; max-width: 320px; }
+    .clue-history-panel .ch-list { max-height: 120px; flex-direction: row; flex-wrap: wrap; }
+    .clue-history-panel .ch-item { flex: 0 0 auto; }
     .mobile-scores { display: flex !important; }
     .grid { gap: 4px; }
     .grid-container { max-width: 100%; width: 100%; }
@@ -608,10 +658,18 @@ export function getHTML(): string {
         <div class="grid-container">
           <div class="grid" id="grid"></div>
         </div>
-        <div class="score-panel blue-panel">
-          <div class="team-label">Blue</div>
-          <div class="score-value" id="blueScore">0</div>
-          <div class="score-sub">remaining</div>
+        <div class="right-column">
+          <div class="score-panel blue-panel">
+            <div class="team-label">Blue</div>
+            <div class="score-value" id="blueScore">0</div>
+            <div class="score-sub">remaining</div>
+          </div>
+          <div class="clue-history-panel" id="clueHistoryPanel">
+            <div class="ch-title">Previous Hints</div>
+            <div class="ch-list" id="clueHistoryList">
+              <div class="ch-empty">No hints yet.</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -980,6 +1038,25 @@ export function getHTML(): string {
       ((state.currentTeam === 'red' && myRole === 'red-operative') ||
        (state.currentTeam === 'blue' && myRole === 'blue-operative'));
     etb.style.display = isMyGuessPhase ? 'inline-flex' : 'none';
+
+    // Previous hints (clue history) — show all past clues, most recent first
+    const chList = document.getElementById('clueHistoryList');
+    if (chList) {
+      const history = Array.isArray(state.clueHistory) ? state.clueHistory : [];
+      const past = state.currentClue
+        ? history.slice(0, -1)
+        : history.slice();
+      if (past.length === 0) {
+        chList.innerHTML = '<div class="ch-empty">No hints yet.</div>';
+      } else {
+        chList.innerHTML = past.slice().reverse().map(c =>
+          '<div class="ch-item ' + c.team + '">'
+          + '<span class="ch-word">' + ((c.word || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')) + '</span>'
+          + '<span class="ch-num">' + c.number + '</span>'
+          + '</div>'
+        ).join('');
+      }
+    }
 
     // Reshuffle button — only spymasters during gameplay; both must agree
     const rb = document.getElementById('reshuffleBtn');
