@@ -131,11 +131,16 @@ export function getHTML(): string {
     background: rgba(168, 85, 247, 0.12);
     color: #c4b5fd;
     border: 1px solid rgba(168, 85, 247, 0.4);
-    padding: 8px 14px;
-    font-size: 0.8rem;
-    font-weight: 700;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    font-size: 1.1rem;
     border-radius: 8px;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
   }
   .btn-reshuffle:hover { background: rgba(168, 85, 247, 0.22); }
 
@@ -603,7 +608,7 @@ export function getHTML(): string {
 
       <div class="actions" id="gameActions">
         <button class="btn btn-secondary" id="endTurnBtn" onclick="endTurn()" style="display:none">End Turn</button>
-        <button class="btn btn-reshuffle" id="reshuffleBtn" onclick="reshuffleBoard()">🔀 Reshuffle Board</button>
+        <button class="btn btn-reshuffle" id="reshuffleBtn" onclick="reshuffleBoard()" title="Reshuffle board">🔀</button>
       </div>
 
       <div class="cheat-panel" id="cheatPanel">
