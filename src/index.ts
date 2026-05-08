@@ -164,9 +164,13 @@ function filterStateForPlayer(game: GameState, playerId: string | null): object 
     currentVotes: voteSummary,
     cheatTally: game.cheatTally,
     cheatVote,
-    reshuffleVotes: (game.reshuffleVotes ?? []).length,
-    reshuffleNeeded: game.players.length,
+    reshuffleVotes: (() => {
+      const sm = game.players.filter(p => p.role === 'red-spymaster' || p.role === 'blue-spymaster').map(p => p.id);
+      return (game.reshuffleVotes ?? []).filter(id => sm.includes(id)).length;
+    })(),
+    reshuffleNeeded: 2,
     myReshuffleVote: !!playerId && (game.reshuffleVotes ?? []).includes(playerId),
+    canReshuffleVote: !!player && (player.role === 'red-spymaster' || player.role === 'blue-spymaster'),
     _isSpymaster: isSpymaster,
     _playerId: playerId,
     _playerRole: player?.role ?? null,
@@ -587,6 +591,8 @@ export class GameRoom {
 
     const player = game.players.find(p => p.id === body.playerId);
     if (!player) return jsonResponse({ error: 'Player not found' }, 400);
+    const isSpymaster = player.role === 'red-spymaster' || player.role === 'blue-spymaster';
+    if (!isSpymaster) return jsonResponse({ error: 'Only spymasters can vote to reshuffle' }, 403);
 
     if (!Array.isArray(game.reshuffleVotes)) game.reshuffleVotes = [];
     const voted = game.reshuffleVotes.includes(player.id);
@@ -596,8 +602,11 @@ export class GameRoom {
       game.reshuffleVotes.push(player.id);
     }
 
-    const allVoted = game.reshuffleVotes.length >= game.players.length;
-    if (allVoted) {
+    const spymasters = game.players.filter(p => p.role === 'red-spymaster' || p.role === 'blue-spymaster');
+    const validVotes = game.reshuffleVotes.filter(id => spymasters.some(s => s.id === id));
+    game.reshuffleVotes = validVotes;
+    const bothSpymastersVoted = spymasters.length === 2 && validVotes.length === 2;
+    if (bothSpymastersVoted) {
       const { cards, startingTeam } = createBoard();
       game.cards = cards;
       game.currentTeam = startingTeam;

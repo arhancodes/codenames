@@ -981,17 +981,19 @@ export function getHTML(): string {
        (state.currentTeam === 'blue' && myRole === 'blue-operative'));
     etb.style.display = isMyGuessPhase ? 'inline-flex' : 'none';
 
-    // Reshuffle button (any active player during gameplay) — consensus required
+    // Reshuffle button — only spymasters during gameplay; both must agree
     const rb = document.getElementById('reshuffleBtn');
     if (rb) {
-      rb.style.display = (!state.gameOver && state.phase !== 'lobby') ? 'inline-flex' : 'none';
+      const inGame = !state.gameOver && state.phase !== 'lobby';
+      const showButton = inGame && !!state.canReshuffleVote;
+      rb.style.display = showButton ? 'inline-flex' : 'none';
       const v = state.reshuffleVotes || 0;
-      const n = state.reshuffleNeeded || 0;
+      const n = state.reshuffleNeeded || 2;
       rb.textContent = v > 0 ? '🔀 ' + v + '/' + n : '🔀';
       rb.classList.toggle('voted', !!state.myReshuffleVote);
       rb.title = state.myReshuffleVote
         ? 'You voted to reshuffle. Click to withdraw.'
-        : 'Vote to reshuffle. Everyone must agree.';
+        : 'Vote to reshuffle. Both spymasters must agree.';
     }
 
     // Vote status
