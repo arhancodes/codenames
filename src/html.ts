@@ -51,11 +51,20 @@ export function getHTML(): string {
     font-size: 2.5rem;
     font-weight: 900;
     letter-spacing: 0.3em;
-    background: linear-gradient(135deg, var(--red), #f87171, var(--blue), #60a5fa);
+    background: linear-gradient(135deg, #fff4b8 0%, #ffd700 25%, #f59e0b 50%, #ffd700 75%, #fff4b8 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    color: transparent;
     margin-bottom: 4px;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.45), 0 0 40px rgba(245, 158, 11, 0.25);
+    filter: drop-shadow(0 2px 8px rgba(255, 200, 0, 0.35));
+    animation: goldShimmer 3.5s ease-in-out infinite;
+    background-size: 200% 200%;
+  }
+  @keyframes goldShimmer {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
   }
 
   .subtitle { color: var(--text-muted); font-size: 0.85rem; }
