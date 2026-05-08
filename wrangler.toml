@@ -4,9 +4,14 @@ compatibility_date = "2024-01-01"
 
 [durable_objects]
 bindings = [
-  { name = "GAME_ROOM", class_name = "GameRoom" }
+  { name = "GAME_ROOM", class_name = "GameRoom" },
+  { name = "CHEAT_STATS", class_name = "CheatStats" }
 ]
 
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["GameRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["CheatStats"]

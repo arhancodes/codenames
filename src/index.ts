@@ -3,6 +3,7 @@ import { getHTML } from './html';
 
 export interface Env {
   GAME_ROOM: DurableObjectNamespace;
+  CHEAT_STATS: DurableObjectNamespace;
 }
 
 interface Card {
@@ -194,10 +195,32 @@ function jsonResponse(data: unknown, status = 200): Response {
 
 export class GameRoom {
   private state: DurableObjectState;
+  private env: Env;
   private game: GameState | null = null;
 
-  constructor(state: DurableObjectState) {
+  constructor(state: DurableObjectState, env: Env) {
     this.state = state;
+    this.env = env;
+  }
+
+  private async getGlobalCheatTally(): Promise<number> {
+    if (!this.env?.CHEAT_STATS) return 0;
+    try {
+      const stub = this.env.CHEAT_STATS.get(this.env.CHEAT_STATS.idFromName('global'));
+      const res = await stub.fetch('https://stats/get');
+      const data = await res.json() as { tally: number };
+      return data.tally ?? 0;
+    } catch { return 0; }
+  }
+
+  private async incrementGlobalCheatTally(): Promise<number> {
+    if (!this.env?.CHEAT_STATS) return 0;
+    try {
+      const stub = this.env.CHEAT_STATS.get(this.env.CHEAT_STATS.idFromName('global'));
+      const res = await stub.fetch('https://stats/increment', { method: 'POST' });
+      const data = await res.json() as { tally: number };
+      return data.tally ?? 0;
+    } catch { return 0; }
   }
 
   private async loadGame(): Promise<GameState | null> {
@@ -284,6 +307,8 @@ export class GameRoom {
     const body = await request.json() as { name: string; role: Role };
     const game = await this.loadGame();
     if (!game) return jsonResponse({ error: 'Game not found' }, 404);
+    const globalTally = await this.getGlobalCheatTally();
+    if (globalTally > 0) game.cheatTally = globalTally;
 
     const trimmedName = body.name.trim() || 'Anonymous';
 
@@ -333,6 +358,8 @@ export class GameRoom {
     const playerId = url.searchParams.get('playerId');
     const game = await this.loadGame();
     if (!game) return jsonResponse({ error: 'Game not found' }, 404);
+    const globalTally = await this.getGlobalCheatTally();
+    if (globalTally > 0) game.cheatTally = globalTally;
     return jsonResponse(filterStateForPlayer(game, playerId));
   }
 
@@ -475,8 +502,10 @@ export class GameRoom {
 
     // If the initiator is the only eligible voter, the vote passes immediately
     if (game.activeCheatVote.approvals.length >= eligible.length) {
-      game.cheatTally += 1;
+      game.cheatTally = await this.incrementGlobalCheatTally();
       game.activeCheatVote = null;
+    } else {
+      game.cheatTally = await this.getGlobalCheatTally();
     }
 
     await this.saveGame();
@@ -502,7 +531,7 @@ export class GameRoom {
       }
       const eligible = eligibleCheatVoters(game);
       if (game.activeCheatVote.approvals.length >= eligible.length) {
-        game.cheatTally += 1;
+        game.cheatTally = await this.incrementGlobalCheatTally();
         game.activeCheatVote = null;
       }
     }
@@ -586,6 +615,51 @@ export class GameRoom {
 
     await this.saveGame();
     return jsonResponse(filterStateForPlayer(game, body.playerId));
+  }
+}
+
+export class CheatStats {
+  private state: DurableObjectState;
+
+  constructor(state: DurableObjectState) {
+    this.state = state;
+  }
+
+  private async getTally(): Promise<number> {
+    const stored = await this.state.storage.get<number>('tally');
+    if (typeof stored === 'number') return stored;
+    const seeded = await this.state.storage.get<boolean>('seeded:v1');
+    if (!seeded) {
+      await this.state.storage.put('tally', 5);
+      await this.state.storage.put('seeded:v1', true);
+      return 5;
+    }
+    return 0;
+  }
+
+  private async setTally(n: number): Promise<void> {
+    await this.state.storage.put('tally', n);
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (path === '/get') {
+      return jsonResponse({ tally: await this.getTally() });
+    }
+    if (path === '/increment' && request.method === 'POST') {
+      const cur = await this.getTally();
+      const next = cur + 1;
+      await this.setTally(next);
+      return jsonResponse({ tally: next });
+    }
+    if (path === '/set' && request.method === 'POST') {
+      const body = await request.json() as { tally: number };
+      await this.setTally(Math.max(0, Math.floor(body.tally || 0)));
+      await this.state.storage.put('seeded:v1', true);
+      return jsonResponse({ tally: await this.getTally() });
+    }
+    return jsonResponse({ error: 'Not found' }, 404);
   }
 }
 
