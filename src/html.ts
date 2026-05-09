@@ -299,6 +299,7 @@ export function getHTML(): string {
   .score-panel.blue-panel .score-value { color: var(--blue); }
   .score-panel .score-sub { font-size: 0.65rem; color: var(--text-muted); margin-top: 2px; }
 
+  .left-column { display: flex; flex-direction: column; gap: 12px; flex-shrink: 0; }
   .right-column { display: flex; flex-direction: column; gap: 12px; flex-shrink: 0; }
 
   .clue-history-panel {
@@ -420,44 +421,48 @@ export function getHTML(): string {
 
   /* Cheat panel — "Did Masi cheat?" */
   .cheat-panel {
-    margin-top: 14px;
+    width: 130px;
     background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.08));
     border: 1px solid rgba(236, 72, 153, 0.35);
     border-radius: 12px;
-    padding: 12px 14px;
+    padding: 10px;
     display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 8px;
   }
   .cheat-panel .cheat-tally {
     display: flex; flex-direction: column; gap: 2px;
-    min-width: 130px;
+    align-items: center;
+    text-align: center;
   }
   .cheat-panel .cheat-label {
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.12em;
+    font-weight: 700;
   }
   .cheat-panel .cheat-count {
-    font-size: 1.4rem;
+    font-size: 1.6rem;
     font-weight: 800;
     color: #f472b6;
     letter-spacing: -0.02em;
+    line-height: 1;
   }
-  .cheat-panel .cheat-actions { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; justify-content: flex-end; }
+  .cheat-panel .cheat-actions { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+  .cheat-panel .cheat-actions:empty { display: none; }
   .btn-cheat {
     background: linear-gradient(135deg, #ec4899, #a855f7);
     color: white;
     border: none;
-    padding: 10px 18px;
-    border-radius: 10px;
+    padding: 8px 6px;
+    border-radius: 8px;
     font-weight: 700;
-    font-size: 0.85rem;
+    font-size: 0.7rem;
     cursor: pointer;
     letter-spacing: 0.02em;
     transition: transform 0.15s, box-shadow 0.15s;
+    line-height: 1.2;
   }
   .btn-cheat:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(236, 72, 153, 0.35); }
   .btn-cheat:disabled { opacity: 0.55; cursor: not-allowed; }
@@ -465,27 +470,27 @@ export function getHTML(): string {
     width: 100%;
     background: rgba(15, 23, 42, 0.55);
     border: 1px dashed rgba(236, 72, 153, 0.45);
-    border-radius: 10px;
-    padding: 10px 12px;
+    border-radius: 8px;
+    padding: 8px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
-  .cheat-vote-box .cheat-vote-text { font-size: 0.85rem; color: var(--text); line-height: 1.4; }
-  .cheat-vote-box .cheat-vote-progress { font-size: 0.75rem; color: var(--text-muted); }
-  .cheat-vote-box .cheat-vote-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cheat-vote-box .cheat-vote-text { font-size: 0.7rem; color: var(--text); line-height: 1.3; }
+  .cheat-vote-box .cheat-vote-progress { font-size: 0.62rem; color: var(--text-muted); }
+  .cheat-vote-box .cheat-vote-actions { display: flex; flex-direction: column; gap: 4px; }
   .btn-approve {
     background: var(--green); color: white; border: none;
-    padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 0.8rem; cursor: pointer;
+    padding: 6px 8px; border-radius: 6px; font-weight: 700; font-size: 0.7rem; cursor: pointer;
   }
   .btn-approve:disabled { opacity: 0.55; cursor: not-allowed; }
   .btn-reject {
     background: var(--red); color: white; border: none;
-    padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 0.8rem; cursor: pointer;
+    padding: 6px 8px; border-radius: 6px; font-weight: 700; font-size: 0.7rem; cursor: pointer;
   }
   .btn-cancel-vote {
     background: rgba(148, 163, 184, 0.18); color: var(--text); border: 1px solid var(--border);
-    padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 0.8rem; cursor: pointer;
+    padding: 6px 8px; border-radius: 6px; font-weight: 600; font-size: 0.65rem; cursor: pointer;
   }
   .cheat-pulse { animation: cheatPulse 1.6s ease-in-out infinite; }
   @keyframes cheatPulse {
@@ -507,8 +512,9 @@ export function getHTML(): string {
     .container { padding: 8px; }
     .game-layout { flex-direction: column; align-items: center; }
     .game-layout .score-panel { display: none; }
-    .right-column { width: 100%; flex-direction: row; justify-content: center; }
-    .right-column .score-panel { display: none; }
+    .left-column, .right-column { width: 100%; flex-direction: row; justify-content: center; }
+    .left-column .score-panel, .right-column .score-panel { display: none; }
+    .cheat-panel { width: 100%; max-width: 320px; }
     .clue-history-panel { width: 100%; max-width: 320px; }
     .clue-history-panel .ch-list { max-height: 120px; flex-direction: row; flex-wrap: wrap; }
     .clue-history-panel .ch-item { flex: 0 0 auto; }
@@ -650,10 +656,20 @@ export function getHTML(): string {
       </div>
 
       <div class="game-layout">
-        <div class="score-panel red-panel">
-          <div class="team-label">Red</div>
-          <div class="score-value" id="redScore">0</div>
-          <div class="score-sub">remaining</div>
+        <div class="left-column">
+          <div class="score-panel red-panel">
+            <div class="team-label">Red</div>
+            <div class="score-value" id="redScore">0</div>
+            <div class="score-sub">remaining</div>
+          </div>
+          <div class="cheat-panel" id="cheatPanel">
+            <div class="cheat-tally">
+              <span class="cheat-label">Caught cheating</span>
+              <span class="cheat-count" id="cheatCount">0</span>
+            </div>
+            <div class="cheat-actions" id="cheatActions"></div>
+            <div class="cheat-vote-box" id="cheatVoteBox" style="display:none"></div>
+          </div>
         </div>
         <div class="grid-container">
           <div class="grid" id="grid"></div>
@@ -676,15 +692,6 @@ export function getHTML(): string {
       <div class="actions" id="gameActions">
         <button class="btn btn-secondary" id="endTurnBtn" onclick="endTurn()" style="display:none">End Turn</button>
         <button class="btn btn-reshuffle" id="reshuffleBtn" onclick="reshuffleBoard()" title="Reshuffle board">🔀</button>
-      </div>
-
-      <div class="cheat-panel" id="cheatPanel">
-        <div class="cheat-tally">
-          <span class="cheat-label">Caught cheating</span>
-          <span class="cheat-count" id="cheatCount">0</span>
-        </div>
-        <div class="cheat-actions" id="cheatActions"></div>
-        <div class="cheat-vote-box" id="cheatVoteBox" style="display:none"></div>
       </div>
     </div>
   </div>
