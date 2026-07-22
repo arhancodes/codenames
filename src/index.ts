@@ -109,14 +109,8 @@ function getTeamOperatives(game: GameState, team: 'red' | 'blue'): Player[] {
 }
 
 function eligibleCheatVoters(game: GameState): Player[] {
-  // The accused and her teammates don't get a vote — only the opposing team does.
-  // If she isn't in the game, everyone may vote.
-  const accused = game.players.find(p => p.name === ACCUSED_NAME);
-  const accusedTeam = accused ? (accused.role.startsWith('red') ? 'red' : 'blue') : null;
-  return game.players.filter(p =>
-    p.name !== ACCUSED_NAME &&
-    (!accusedTeam || (p.role.startsWith('red') ? 'red' : 'blue') !== accusedTeam)
-  );
+  // Everyone votes except the accused herself, teammates included.
+  return game.players.filter(p => p.name !== ACCUSED_NAME);
 }
 
 // Majority voted to skip the accused's turn — only applies if it's currently her team's turn
@@ -538,9 +532,6 @@ export class GameRoom {
     if (player.name === ACCUSED_NAME) return jsonResponse({ error: 'The accused cannot start their own vote' }, 403);
 
     const eligible = eligibleCheatVoters(game);
-    if (!eligible.some(p => p.id === player.id)) {
-      return jsonResponse({ error: "The accused's teammates cannot vote" }, 403);
-    }
     game.activeCheatVote = {
       initiatorId: player.id,
       initiatorName: player.name,
@@ -570,9 +561,6 @@ export class GameRoom {
     if (!player) return jsonResponse({ error: 'Player not found' }, 400);
     if (player.name === ACCUSED_NAME) return jsonResponse({ error: 'The accused cannot vote' }, 403);
     const eligible = eligibleCheatVoters(game);
-    if (!eligible.some(p => p.id === player.id)) {
-      return jsonResponse({ error: "The accused's teammates cannot vote" }, 403);
-    }
 
     if (body.approve === false) {
       // A single rejection cancels the vote — needs to be unanimous
@@ -761,7 +749,11 @@ export default {
     // Serve frontend
     if (request.method === 'GET' && pathname === '/') {
       return new Response(getHTML(), {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          // Always revalidate so a deploy reaches open tabs on their next reload
+          'Cache-Control': 'no-cache, must-revalidate',
+        },
       });
     }
 

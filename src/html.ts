@@ -9,10 +9,10 @@ export function getHTML(): string {
 <!-- Open Graph (rich link preview in iMessage / Mail / etc.) -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="Codenames">
-<meta property="og:description" content="Play Codenames with friends — pick a room code and jump in.">
+<meta property="og:description" content="Play Codenames with friends, pick a room code and jump in.">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Codenames">
-<meta name="twitter:description" content="Play Codenames with friends — pick a room code and jump in.">
+<meta name="twitter:description" content="Play Codenames with friends, pick a room code and jump in.">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -946,7 +946,7 @@ export function getHTML(): string {
     const startBtn = document.getElementById('startBtn');
     if (canStart && playerId) {
       startBtn.style.display = 'block';
-      document.getElementById('lobbyStatus').textContent = 'All roles filled — ready to start!';
+      document.getElementById('lobbyStatus').textContent = 'All roles filled, ready to start!';
     } else {
       startBtn.style.display = 'none';
       const hasRedSpy = players.some(p => p.role === 'red-spymaster');
@@ -1020,10 +1020,10 @@ export function getHTML(): string {
       ti.textContent = state.winner ? state.winner.toUpperCase() + ' WINS!' : 'GAME OVER';
     } else if (state.phase === 'clue') {
       ti.className = 'turn-indicator ' + state.currentTeam + '-turn';
-      ti.textContent = state.currentTeam.toUpperCase() + ' SPYMASTER — GIVE A CLUE';
+      ti.textContent = state.currentTeam.toUpperCase() + ' SPYMASTER, GIVE A CLUE';
     } else {
       ti.className = 'turn-indicator ' + state.currentTeam + '-turn';
-      ti.textContent = state.currentTeam.toUpperCase() + ' OPERATIVES — GUESS';
+      ti.textContent = state.currentTeam.toUpperCase() + ' OPERATIVES, GUESS';
     }
 
     // Clue display
@@ -1092,7 +1092,7 @@ export function getHTML(): string {
       if (state._votesIn === 0) {
         vs.textContent = 'Waiting for operatives to vote (' + state._totalOperatives + ' needed)';
       } else {
-        vs.textContent = state._votesIn + ' of ' + state._totalOperatives + ' operatives voted — all must pick the same card';
+        vs.textContent = state._votesIn + ' of ' + state._totalOperatives + ' operatives voted, all must pick the same card';
       }
     } else {
       vs.style.display = 'none';
@@ -1168,7 +1168,7 @@ export function getHTML(): string {
     const isAccused = myName === accusedName;
     const vote = state.cheatVote;
 
-    // The accused sees the panel too — tally and vote progress, but no vote buttons
+    // The accused sees the panel too: tally and vote progress, but no vote buttons
     panel.style.display = 'flex';
 
     if (vote) {
@@ -1180,14 +1180,12 @@ export function getHTML(): string {
       const isInitiator = initiator === myName;
       const safeInitiator = String(initiator).replace(/</g,'&lt;').replace(/>/g,'&gt;');
       const safeAccused = String(accusedName).replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      let html = '<div class="cheat-vote-text">🚨 <strong>' + safeInitiator + '</strong> says <strong>' + safeAccused + '</strong> cheated. The other team must unanimously approve to count it — her teammates don\\'t get a vote.</div>';
-      html += '<div class="cheat-vote-progress">' + (vote.approvals || 0) + ' of ' + (vote.needed || 0) + ' approvals — ' + remaining + ' more needed</div>';
+      let html = '<div class="cheat-vote-text">🚨 <strong>' + safeInitiator + '</strong> says <strong>' + safeAccused + '</strong> cheated. Everyone must approve to count it.</div>';
+      html += '<div class="cheat-vote-progress">' + (vote.approvals || 0) + ' of ' + (vote.needed || 0) + ' approvals, ' + remaining + ' more needed</div>';
       html += '<div class="cheat-vote-progress">⏭️ Skip her turn: ' + (vote.skipVotes || 0) + ' of ' + (vote.skipNeeded || 0) + ' needed (majority)</div>';
       html += '<div class="cheat-vote-actions">';
       if (isAccused) {
-        html += '<div class="cheat-vote-progress">You are the accused — sit tight.</div>';
-      } else if (!state._canAccuse) {
-        html += '<div class="cheat-vote-progress">You\\'re on her team — you don\\'t get a vote.</div>';
+        html += '<div class="cheat-vote-progress">You are the accused, sit tight.</div>';
       } else if (vote.myApproval) {
         html += '<button class="btn-approve" disabled>You approved ✓</button>';
         if (vote.mySkip) {
