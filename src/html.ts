@@ -484,6 +484,11 @@ export function getHTML(): string {
     padding: 6px 8px; border-radius: 6px; font-weight: 700; font-size: 0.7rem; cursor: pointer;
   }
   .btn-approve:disabled { opacity: 0.55; cursor: not-allowed; }
+  .btn-approve-skip {
+    background: linear-gradient(135deg, #f97316, #ef4444); color: white; border: none;
+    padding: 6px 8px; border-radius: 6px; font-weight: 700; font-size: 0.7rem; cursor: pointer;
+  }
+  .btn-approve-skip:disabled { opacity: 0.55; cursor: not-allowed; }
   .btn-reject {
     background: var(--red); color: white; border: none;
     padding: 6px 8px; border-radius: 6px; font-weight: 700; font-size: 0.7rem; cursor: pointer;
@@ -1177,11 +1182,18 @@ export function getHTML(): string {
       const safeAccused = String(accusedName).replace(/</g,'&lt;').replace(/>/g,'&gt;');
       let html = '<div class="cheat-vote-text">🚨 <strong>' + safeInitiator + '</strong> says <strong>' + safeAccused + '</strong> cheated. Everyone must approve to count it.</div>';
       html += '<div class="cheat-vote-progress">' + (vote.approvals || 0) + ' of ' + (vote.needed || 0) + ' approvals — ' + remaining + ' more needed</div>';
+      html += '<div class="cheat-vote-progress">⏭️ Skip her turn: ' + (vote.skipVotes || 0) + ' of ' + (vote.skipNeeded || 0) + ' needed (majority)</div>';
       html += '<div class="cheat-vote-actions">';
       if (vote.myApproval) {
         html += '<button class="btn-approve" disabled>You approved ✓</button>';
+        if (vote.mySkip) {
+          html += '<button class="btn-approve-skip" disabled>Skip her turn ✓</button>';
+        } else {
+          html += '<button class="btn-approve-skip" onclick="cheatVote(true, true)">Yes, and skip her turn</button>';
+        }
       } else {
         html += '<button class="btn-approve" onclick="cheatVote(true)">Yes, she cheated</button>';
+        html += '<button class="btn-approve-skip" onclick="cheatVote(true, true)">Yes, and skip her turn</button>';
         html += '<button class="btn-reject" onclick="cheatVote(false)">No, she did not</button>';
       }
       if (isInitiator) {
@@ -1216,12 +1228,12 @@ export function getHTML(): string {
       .catch(() => showToast('Could not start vote'));
   }
 
-  function cheatVote(approve) {
+  function cheatVote(approve, skip) {
     if (!playerId || !roomCode) return;
     fetch('/api/cheat-vote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameId: roomCode, playerId, approve })
+      body: JSON.stringify({ gameId: roomCode, playerId, approve, skip: !!skip })
     })
       .then(r => r.json())
       .then(data => {

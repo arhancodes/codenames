@@ -32,6 +32,7 @@ interface CheatVote {
   initiatorName: string;
   startedAt: number;
   approvals: string[]; // player IDs who approved (initiator auto-approves)
+  skipVotes: string[]; // subset of approvals who also want to skip her turn
 }
 
 interface GameState {
@@ -111,6 +112,19 @@ function eligibleCheatVoters(game: GameState): Player[] {
   return game.players.filter(p => p.name !== ACCUSED_NAME);
 }
 
+// Majority voted to skip the accused's turn — only applies if it's currently her team's turn
+function applyCheatSkip(game: GameState): void {
+  const accused = game.players.find(p => p.name === ACCUSED_NAME);
+  if (!accused || game.gameOver) return;
+  if (game.phase !== 'clue' && game.phase !== 'guess') return;
+  const accusedTeam = accused.role.startsWith('red') ? 'red' : 'blue';
+  if (game.currentTeam !== accusedTeam) return;
+  game.currentTeam = game.currentTeam === 'red' ? 'blue' : 'red';
+  game.currentClue = null;
+  game.phase = 'clue';
+  game.currentVotes = {};
+}
+
 function filterStateForPlayer(game: GameState, playerId: string | null): object {
   const player = playerId ? game.players.find(p => p.id === playerId) : null;
   const isSpymaster = player?.role === 'red-spymaster' || player?.role === 'blue-spymaster';
@@ -143,6 +157,9 @@ function filterStateForPlayer(game: GameState, playerId: string | null): object 
         approvals: game.activeCheatVote.approvals.length,
         needed: eligible.length,
         myApproval: playerId ? game.activeCheatVote.approvals.includes(playerId) : false,
+        skipVotes: (game.activeCheatVote.skipVotes ?? []).length,
+        skipNeeded: Math.floor(eligible.length / 2) + 1,
+        mySkip: playerId ? (game.activeCheatVote.skipVotes ?? []).includes(playerId) : false,
       }
     : null;
   const isAccused = player?.name === ACCUSED_NAME;
@@ -234,6 +251,7 @@ export class GameRoom {
       // Migrate older saves: cheat tally starts at 3, no active vote
       if (typeof stored.cheatTally !== 'number') stored.cheatTally = 3;
       if (stored.activeCheatVote === undefined) stored.activeCheatVote = null;
+      if (stored.activeCheatVote && !Array.isArray(stored.activeCheatVote.skipVotes)) stored.activeCheatVote.skipVotes = [];
       if (!Array.isArray(stored.reshuffleVotes)) stored.reshuffleVotes = [];
     }
     this.game = stored;
@@ -486,8 +504,20 @@ export class GameRoom {
     return jsonResponse(filterStateForPlayer(game, body.playerId));
   }
 
+  // Unanimous approval reached: count the cheat, and skip her turn if a majority asked for it
+  private async resolveCheatPass(game: GameState): Promise<void> {
+    const vote = game.activeCheatVote;
+    if (!vote) return;
+    const eligible = eligibleCheatVoters(game);
+    game.cheatTally = await this.incrementGlobalCheatTally();
+    if ((vote.skipVotes ?? []).length * 2 > eligible.length) {
+      applyCheatSkip(game);
+    }
+    game.activeCheatVote = null;
+  }
+
   private async handleCheatStart(request: Request): Promise<Response> {
-    const body = await request.json() as { playerId: string };
+    const body = await request.json() as { playerId: string; skip?: boolean };
     const game = await this.loadGame();
     if (!game) return jsonResponse({ error: 'Game not found' }, 404);
     if (game.activeCheatVote) return jsonResponse({ error: 'A cheat vote is already in progress' }, 400);
@@ -502,12 +532,12 @@ export class GameRoom {
       initiatorName: player.name,
       startedAt: Date.now(),
       approvals: [player.id],
+      skipVotes: body.skip ? [player.id] : [],
     };
 
     // If the initiator is the only eligible voter, the vote passes immediately
     if (game.activeCheatVote.approvals.length >= eligible.length) {
-      game.cheatTally = await this.incrementGlobalCheatTally();
-      game.activeCheatVote = null;
+      await this.resolveCheatPass(game);
     } else {
       game.cheatTally = await this.getGlobalCheatTally();
     }
@@ -517,7 +547,7 @@ export class GameRoom {
   }
 
   private async handleCheatVote(request: Request): Promise<Response> {
-    const body = await request.json() as { playerId: string; approve: boolean };
+    const body = await request.json() as { playerId: string; approve: boolean; skip?: boolean };
     const game = await this.loadGame();
     if (!game) return jsonResponse({ error: 'Game not found' }, 404);
     if (!game.activeCheatVote) return jsonResponse({ error: 'No cheat vote in progress' }, 400);
@@ -533,10 +563,13 @@ export class GameRoom {
       if (!game.activeCheatVote.approvals.includes(player.id)) {
         game.activeCheatVote.approvals.push(player.id);
       }
+      if (!Array.isArray(game.activeCheatVote.skipVotes)) game.activeCheatVote.skipVotes = [];
+      if (body.skip && !game.activeCheatVote.skipVotes.includes(player.id)) {
+        game.activeCheatVote.skipVotes.push(player.id);
+      }
       const eligible = eligibleCheatVoters(game);
       if (game.activeCheatVote.approvals.length >= eligible.length) {
-        game.cheatTally = await this.incrementGlobalCheatTally();
-        game.activeCheatVote = null;
+        await this.resolveCheatPass(game);
       }
     }
 
@@ -815,23 +848,23 @@ export default {
 
     // Start a "Did Masi cheat?" vote
     if (request.method === 'POST' && pathname === '/api/cheat-start') {
-      const body = await request.json() as { gameId: string; playerId: string };
+      const body = await request.json() as { gameId: string; playerId: string; skip?: boolean };
       const stub = getStub(env, body.gameId);
       return stub.fetch(new Request('https://do/?action=cheat-start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId: body.playerId }),
+        body: JSON.stringify({ playerId: body.playerId, skip: !!body.skip }),
       }));
     }
 
     // Approve / reject the cheat vote
     if (request.method === 'POST' && pathname === '/api/cheat-vote') {
-      const body = await request.json() as { gameId: string; playerId: string; approve: boolean };
+      const body = await request.json() as { gameId: string; playerId: string; approve: boolean; skip?: boolean };
       const stub = getStub(env, body.gameId);
       return stub.fetch(new Request('https://do/?action=cheat-vote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId: body.playerId, approve: body.approve }),
+        body: JSON.stringify({ playerId: body.playerId, approve: body.approve, skip: !!body.skip }),
       }));
     }
 
