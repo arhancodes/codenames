@@ -1168,8 +1168,8 @@ export function getHTML(): string {
     const isAccused = myName === accusedName;
     const vote = state.cheatVote;
 
-    // Hide entire panel for the accused themselves
-    panel.style.display = isAccused ? 'none' : 'flex';
+    // The accused sees the panel too — tally and vote progress, but no vote buttons
+    panel.style.display = 'flex';
 
     if (vote) {
       actions.innerHTML = '';
@@ -1184,7 +1184,9 @@ export function getHTML(): string {
       html += '<div class="cheat-vote-progress">' + (vote.approvals || 0) + ' of ' + (vote.needed || 0) + ' approvals — ' + remaining + ' more needed</div>';
       html += '<div class="cheat-vote-progress">⏭️ Skip her turn: ' + (vote.skipVotes || 0) + ' of ' + (vote.skipNeeded || 0) + ' needed (majority)</div>';
       html += '<div class="cheat-vote-actions">';
-      if (vote.myApproval) {
+      if (isAccused) {
+        html += '<div class="cheat-vote-progress">You are the accused — sit tight.</div>';
+      } else if (vote.myApproval) {
         html += '<button class="btn-approve" disabled>You approved ✓</button>';
         if (vote.mySkip) {
           html += '<button class="btn-approve-skip" disabled>Skip her turn ✓</button>';
