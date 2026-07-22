@@ -109,7 +109,14 @@ function getTeamOperatives(game: GameState, team: 'red' | 'blue'): Player[] {
 }
 
 function eligibleCheatVoters(game: GameState): Player[] {
-  return game.players.filter(p => p.name !== ACCUSED_NAME);
+  // The accused and her teammates don't get a vote — only the opposing team does.
+  // If she isn't in the game, everyone may vote.
+  const accused = game.players.find(p => p.name === ACCUSED_NAME);
+  const accusedTeam = accused ? (accused.role.startsWith('red') ? 'red' : 'blue') : null;
+  return game.players.filter(p =>
+    p.name !== ACCUSED_NAME &&
+    (!accusedTeam || (p.role.startsWith('red') ? 'red' : 'blue') !== accusedTeam)
+  );
 }
 
 // Majority voted to skip the accused's turn — only applies if it's currently her team's turn
@@ -149,15 +156,17 @@ function filterStateForPlayer(game: GameState, playerId: string | null): object 
     ...(p.id === playerId ? { id: p.id } : {}),
   }));
 
-  // Cheat vote — surface counts but not raw player IDs
+  // Cheat vote — surface counts but not raw player IDs.
+  // Count only currently-eligible voters, in case someone switched roles mid-vote.
   const eligible = eligibleCheatVoters(game);
+  const eligibleIds = new Set(eligible.map(p => p.id));
   const cheatVote = game.activeCheatVote
     ? {
         initiatorName: game.activeCheatVote.initiatorName,
-        approvals: game.activeCheatVote.approvals.length,
+        approvals: game.activeCheatVote.approvals.filter(id => eligibleIds.has(id)).length,
         needed: eligible.length,
         myApproval: playerId ? game.activeCheatVote.approvals.includes(playerId) : false,
-        skipVotes: (game.activeCheatVote.skipVotes ?? []).length,
+        skipVotes: (game.activeCheatVote.skipVotes ?? []).filter(id => eligibleIds.has(id)).length,
         skipNeeded: Math.floor(eligible.length / 2) + 1,
         mySkip: playerId ? (game.activeCheatVote.skipVotes ?? []).includes(playerId) : false,
       }
@@ -197,7 +206,7 @@ function filterStateForPlayer(game: GameState, playerId: string | null): object 
     _totalOperatives: teamOps.length,
     _votesIn: Object.keys(game.currentVotes).length,
     _canStart: game.phase === 'lobby' && canStartGame(game.players),
-    _canAccuse: !isAccused && eligible.length > 0,
+    _canAccuse: !!player && eligibleIds.has(player.id),
     _accusedName: ACCUSED_NAME,
   };
 }
@@ -509,8 +518,10 @@ export class GameRoom {
     const vote = game.activeCheatVote;
     if (!vote) return;
     const eligible = eligibleCheatVoters(game);
+    const eligibleIds = new Set(eligible.map(p => p.id));
     game.cheatTally = await this.incrementGlobalCheatTally();
-    if ((vote.skipVotes ?? []).length * 2 > eligible.length) {
+    const skips = (vote.skipVotes ?? []).filter(id => eligibleIds.has(id));
+    if (skips.length * 2 > eligible.length) {
       applyCheatSkip(game);
     }
     game.activeCheatVote = null;
@@ -527,6 +538,9 @@ export class GameRoom {
     if (player.name === ACCUSED_NAME) return jsonResponse({ error: 'The accused cannot start their own vote' }, 403);
 
     const eligible = eligibleCheatVoters(game);
+    if (!eligible.some(p => p.id === player.id)) {
+      return jsonResponse({ error: "The accused's teammates cannot vote" }, 403);
+    }
     game.activeCheatVote = {
       initiatorId: player.id,
       initiatorName: player.name,
@@ -555,6 +569,10 @@ export class GameRoom {
     const player = game.players.find(p => p.id === body.playerId);
     if (!player) return jsonResponse({ error: 'Player not found' }, 400);
     if (player.name === ACCUSED_NAME) return jsonResponse({ error: 'The accused cannot vote' }, 403);
+    const eligible = eligibleCheatVoters(game);
+    if (!eligible.some(p => p.id === player.id)) {
+      return jsonResponse({ error: "The accused's teammates cannot vote" }, 403);
+    }
 
     if (body.approve === false) {
       // A single rejection cancels the vote — needs to be unanimous
@@ -567,8 +585,8 @@ export class GameRoom {
       if (body.skip && !game.activeCheatVote.skipVotes.includes(player.id)) {
         game.activeCheatVote.skipVotes.push(player.id);
       }
-      const eligible = eligibleCheatVoters(game);
-      if (game.activeCheatVote.approvals.length >= eligible.length) {
+      const eligibleIds = new Set(eligible.map(p => p.id));
+      if (game.activeCheatVote.approvals.filter(id => eligibleIds.has(id)).length >= eligible.length) {
         await this.resolveCheatPass(game);
       }
     }

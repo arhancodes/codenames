@@ -1180,12 +1180,14 @@ export function getHTML(): string {
       const isInitiator = initiator === myName;
       const safeInitiator = String(initiator).replace(/</g,'&lt;').replace(/>/g,'&gt;');
       const safeAccused = String(accusedName).replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      let html = '<div class="cheat-vote-text">🚨 <strong>' + safeInitiator + '</strong> says <strong>' + safeAccused + '</strong> cheated. Everyone must approve to count it.</div>';
+      let html = '<div class="cheat-vote-text">🚨 <strong>' + safeInitiator + '</strong> says <strong>' + safeAccused + '</strong> cheated. The other team must unanimously approve to count it — her teammates don\\'t get a vote.</div>';
       html += '<div class="cheat-vote-progress">' + (vote.approvals || 0) + ' of ' + (vote.needed || 0) + ' approvals — ' + remaining + ' more needed</div>';
       html += '<div class="cheat-vote-progress">⏭️ Skip her turn: ' + (vote.skipVotes || 0) + ' of ' + (vote.skipNeeded || 0) + ' needed (majority)</div>';
       html += '<div class="cheat-vote-actions">';
       if (isAccused) {
         html += '<div class="cheat-vote-progress">You are the accused — sit tight.</div>';
+      } else if (!state._canAccuse) {
+        html += '<div class="cheat-vote-progress">You\\'re on her team — you don\\'t get a vote.</div>';
       } else if (vote.myApproval) {
         html += '<button class="btn-approve" disabled>You approved ✓</button>';
         if (vote.mySkip) {
